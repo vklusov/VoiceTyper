@@ -1,0 +1,23 @@
+# VoiceTyper .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
+
+# macOS
+.DS_Store
+*.swp
+*.swo
+
+# Audio temp files
+/tmp/voicetyper_*.wav
+
+# IDE
+.idea/
+.vscode/
+
+# Build (future)
+client/build/
+client/DerivedData/
