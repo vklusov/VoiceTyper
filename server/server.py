@@ -67,7 +67,7 @@ def clean_text_with_llm(text: str, language: str) -> str:
         response = client.chat(
             model="qwen2.5:3b",
             messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0.0, "max_TOKEN_REMOVEDs": 512},
+            options={"temperature": 0.0, "max_tokens": 512},
         )
         cleaned = response["message"]["content"].strip()
         return cleaned
