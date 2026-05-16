@@ -25,7 +25,7 @@ app = FastAPI(title="VoiceTyper Server", version="1.0.0")
 # ── Global state (lazy init) ─────────────────────────────
 whisper_model = None
 ollama_client = None
-current_whisper_model_name = "small"
+current_whisper_model_name = "large-v3"
 
 
 def get_whisper():
@@ -48,7 +48,6 @@ def get_ollama():
     if ollama_client is None:
         from ollama import Client
         ollama_client = Client(host="http://localhost:11434")
-        # Warm-up check
         try:
             ollama_client.list()
         except Exception as e:
@@ -113,11 +112,9 @@ async def transcribe(
     language: str = Form("auto"),
 ):
     """Transcribe audio file and optionally clean with LLM."""
-    # Validate audio
     if not audio.filename:
         raise HTTPException(400, "No audio file provided")
 
-    # Save uploaded file temporarily
     suffix = Path(audio.filename).suffix or ".wav"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         content = await audio.read()
@@ -127,7 +124,6 @@ async def transcribe(
     try:
         model = get_whisper()
 
-        # Transcribe
         log.info(f"Transcribing {audio.filename} ({len(content)} bytes, lang={language})...")
         t0 = time.time()
 
@@ -136,13 +132,12 @@ async def transcribe(
             tmp_path,
             language=seg_lang,
             beam_size=5,
-            vad_filter=True,
+            vad_filter=False,
         )
 
         segments = list(segments)
         duration_ms = int((time.time() - t0) * 1000)
 
-        # Combine segments
         raw_transcript = " ".join(seg.text.strip() for seg in segments)
         detected_language = info.language
 
@@ -152,9 +147,8 @@ async def transcribe(
             f"| chars={len(raw_transcript)}"
         )
 
-        # Optional LLM cleanup
         cleaned = None
-        if clean_llm:
+        if clean_llm and raw_transcript.strip():
             log.info("Cleaning with LLM...")
             cleaned = clean_text_with_llm(raw_transcript, detected_language)
 
@@ -172,7 +166,6 @@ async def transcribe(
         raise HTTPException(500, f"Transcription failed: {e}")
 
     finally:
-        # Cleanup temp file
         try:
             os.unlink(tmp_path)
         except Exception:

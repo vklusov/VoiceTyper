@@ -9,8 +9,8 @@ macOS-приложение в трее для голосового ввода т
 
 ```
 ┌─────────────────────────────────┐     HTTP/JSON      ┌──────────────────────────┐
-│         VoiceTyper.app          │ ◄───────────────► │   Сервер (78-й Mac M4)   │
-│       (клиентский Mac)          │                     │    127.0.0.1:9001     │
+│         VoiceTyper.app          │ ◄───────────────► │   Сервер (выделенный     │
+│       (клиентский Mac)          │                     │   Mac)                   │
 │                                 │   POST /transcribe  │                          │
 │  ┌─────────────────────────┐    │   (WAV → JSON)     │  ┌──────────────────┐    │
 │  │ StatusBarApp (SwiftUI)  │    │                     │  │  faster-whisper  │    │
@@ -20,7 +20,7 @@ macOS-приложение в трее для голосового ввода т
 │  │                         │    │                     │  ┌────────▼─────────┐    │
 │  │ HotKeyRecorder          │──┼─                     │  │  Ollama          │    │
 │  │   - Правый Cmd          │    │                     │  │  Qwen 2.5 3B     │    │
-│  │   - Старт/стоп          │    │                     │  │  (чистка,         │    │
+│  │   - Старт/стоп          │    │                     │  │  (чистка,        │    │
 │  │                         │    │                     │  │   отключена)     │    │
 │  │ AudioRecorder           │    │                     │  └──────────────────┘    │
 │  │   - AVAudioEngine       │    │                     │                          │
@@ -35,7 +35,7 @@ macOS-приложение в трее для голосового ввода т
 └─────────────────────────────────┘
 ```
 
-## Сервер (78-й Mac Mini M4, 127.0.0.1)
+## Сервер
 
 ### API
 
@@ -64,7 +64,7 @@ macOS-приложение в трее для голосового ввода т
 ### Серверный стек
 
 - Python 3 + FastAPI + Uvicorn
-- faster-whisper large-v3 (CUDA/CoreML на M4)
+- faster-whisper large-v3
 - Ollama Qwen 2.5 3B (чистка, отключена по умолчанию)
 - Запуск: `~/voicetyper-server/server/start.sh`
 
@@ -80,7 +80,7 @@ macOS-приложение в трее для голосового ввода т
 
 | Параметр | По умолч. | Описание |
 |----------|-----------|----------|
-| Server Host | 127.0.0.1 | IP сервера |
+| Server Host | (IP сервера) | IP сервера |
 | Server Port | 9001 | Порт |
 | Whisper Model | large-v3 | small/medium/large-v3 |
 | Clean with LLM | false | Чистка Ollama |
@@ -105,7 +105,7 @@ macOS-приложение в трее для голосового ввода т
 ```
 1. Правый Cmd (зажал) → 🔴 запись
 2. Правый Cmd (отпустил) → 🟠 обработка
-3. POST /transcribe → fastfer-whisper large-v3
+3. POST /transcribe → faster-whisper large-v3
 4. Копирование в буфер обмена
 5. AppleScript Cmd+V (если есть Accessibility права)
 6. ⚪ готов
@@ -124,6 +124,5 @@ xattr -dr com.apple.quarantine ~/Applications/VoiceTyper.app
 ## Примечания
 
 - macOS 26.5+ (Swift 6)
-- Mac mini M4 (78-й) не имеет встроенного микрофона — нужна вебкамера/гарнитура
 - Минимальный bundle ID: com.vklusov.VoiceTyper (права Accessibility не слетают)
 - Подпись: ad-hoc + entitlements (микрофон, автоматизация)
