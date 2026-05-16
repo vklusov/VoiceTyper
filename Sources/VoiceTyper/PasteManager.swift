@@ -1,30 +1,51 @@
 import Cocoa
-import Carbon
+import UserNotifications
+import OSLog
 
 class PasteManager {
-    
-    /// Вставляет текст в активное окно через Accessibility API
-    static func paste(text: String) {
+    private static let log = Logger(subsystem: "com.vklusov.VoiceTyper", category: "PasteManager")
+
+    static func paste(text: String, completion: @escaping () -> Void = {}) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            completion()
+            return
+        }
+
+        log.info("Copying to clipboard: \(trimmed.prefix(60))")
+
         DispatchQueue.main.async {
-            // Copy to clipboard
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            pasteboard.setString(text, forType: .string)
-            
-            // Small delay to let pasteboard update
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                // Simulate Cmd+V
-                let source = CGEventSource(stateID: .combinedSessionState)
-                
-                let keyVDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)
-                let keyVUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
-                
-                keyVDown?.flags = .maskCommand
-                keyVUp?.flags = .maskCommand
-                
-                keyVDown?.post(tap: .cghidEventTap)
-                keyVUp?.post(tap: .cghidEventTap)
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(trimmed, forType: .string)
+
+            // Try AppleScript Cmd+V
+            var err: NSDictionary?
+            var pasteFailed = true
+            let script = "tell application \"System Events\" to keystroke \"v\" using command down"
+            if let so = NSAppleScript(source: script) {
+                so.executeAndReturnError(&err)
+                if err == nil {
+                    pasteFailed = false
+                    log.info("Pasted via Cmd+V")
+                }
             }
+
+            // Show notification
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { granted, _ in
+                let content = UNMutableNotificationContent()
+                content.title = "VoiceTyper"
+                if pasteFailed {
+                    content.body = "\(trimmed.prefix(80)) — ⌘V to paste"
+                } else {
+                    content.body = String(trimmed.prefix(100))
+                }
+                UNUserNotificationCenter.current().add(
+                    UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+                )
+            }
+
+            completion()
         }
     }
 }

@@ -2,16 +2,13 @@
 import PackageDescription
 
 let package = Package(
-    name: VoiceTyper,
+    name: "VoiceTyper",
     platforms: [
         .macOS(.v15)
     ],
     targets: [
         .executableTarget(
-            name: VoiceTyper,
-            resources: [
-                .process(Resources)
-            ]
+            name: "VoiceTyper"
         )
     ]
 )

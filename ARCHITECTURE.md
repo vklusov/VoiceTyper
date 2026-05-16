@@ -2,7 +2,8 @@
 
 ## Идея
 
-macOS-приложение в трее для голосового ввода текста. Хоткей → аудиозапись → Whisper → (опросional LLM-чистка) → вставка в активное окно.
+macOS-приложение в трее для голосового ввода текста.
+Правый Cmd → аудиозапись → faster-whisper (large-v3) → вставка в буфер обмена.
 
 ## Компоненты
 
@@ -12,122 +13,117 @@ macOS-приложение в трее для голосового ввода т
 │       (клиентский Mac)          │                     │    127.0.0.1:9001     │
 │                                 │   POST /transcribe  │                          │
 │  ┌─────────────────────────┐    │   (WAV → JSON)     │  ┌──────────────────┐    │
-│  │ StatusBarApp (SwiftUI)  │    │                     │  │  whisper-cpp     │    │
-│  │   - MenuBar иконка      │    │                     │  │  (small/medium/   │    │
-│  │   - SettingsView        │    │                     │  │   large)          │    │
-│  │                         │    │                     │  └────────┬─────────┘    │
-│  │ HotKeyRecorder          │──┼─                     │           │               │
-│  │   - Option+Space        │    │                     │  ┌────────▼─────────┐    │
-│  │   - Старт/стоп записи   │    │                     │  │  Ollama          │    │
-│  │                         │    │                     │  │  Qwen 2.5 3B     │    │
-│  │ AudioRecorder           │    │                     │  │  (чистка,        │    │
-│  │   - Запись через AVCapture│   │                     │  │  опционально)    │    │
-│  │   - WAV 16kHz 16bit     │    │                     │  └──────────────────┘    │
+│  │ StatusBarApp (SwiftUI)  │    │                     │  │  faster-whisper  │    │
+│  │   - MenuBar иконка      │    │                     │  │  (large-v3)      │    │
+│  │   - SettingsView        │    │                     │  └────────┬─────────┘    │
+│  │   - цвет: 🔴🟠⚪        │    │                     │           │               │
+│  │                         │    │                     │  ┌────────▼─────────┐    │
+│  │ HotKeyRecorder          │──┼─                     │  │  Ollama          │    │
+│  │   - Правый Cmd          │    │                     │  │  Qwen 2.5 3B     │    │
+│  │   - Старт/стоп          │    │                     │  │  (чистка,         │    │
+│  │                         │    │                     │  │   отключена)     │    │
+│  │ AudioRecorder           │    │                     │  └──────────────────┘    │
+│  │   - AVAudioEngine       │    │                     │                          │
+│  │   - WAV 16kHz 16bit     │    │                     │                          │
+│  │   - Выбор устройства    │    │                     │                          │
 │  │                         │    │                     │                          │
-│  │ HTTPClient              │    │                     │                          │
+│  │ VoiceTyperClient        │    │                     │                          │
 │  │ PasteManager            │    │                     │                          │
-│  │   - Accessibility API   │    │                     │                          │
-│  │   - Вставка в окно      │    │                     │                          │
+│  │   - AppleScript Cmd+V   │    │                     │                          │
+│  │   - Fallback: ⌘V сам    │    │                     │                          │
 │  └─────────────────────────┘    │                     └──────────────────────────┘
 └─────────────────────────────────┘
 ```
 
 ## Сервер (78-й Mac Mini M4, 127.0.0.1)
 
-### API Endpoints
+### API
 
-| Method | Path | Описание |
+| Метод | Путь | Описание |
 |--------|------|----------|
-| GET | /status | Проверка здоровья сервера |
-| POST | /transcribe | Аудио → транскрипт |
-| GET | /settings | Вернуть текущие настройки моделей |
-| POST | /settings | Изменить модель/параметры |
+| GET | /status | Проверка здоровья |
+| GET | /settings | Вернуть настройки |
+| POST | /transcribe | Аудио → текст |
 
-### POST /transcribe
+**POST /transcribe:**
+- `multipart/form-data: audio` (WAV, 16kHz, 16bit, mono)
+- `clean_llm: bool` (по умолч. false)
+- `language: str` (auto/ru/en)
 
-**Request:**
-- `multipart/form-data` с полем `audio` (WAV, 16kHz, 16bit, mono)
-- Доп. поле `clean_llm: bool` — нужна ли LLM-чистка
-
-**Response:**
+**Ответ:**
 ```json
 {
-  "raw": "сырои транскрипт от виспера",
-  "cleaned": "Сырой транскрипт от Whisper.",
+  "raw": "распознанный текст",
+  "cleaned": null,
   "language": "ru",
   "duration_ms": 3200,
-  "model": "small"
+  "model": "large-v3"
 }
 ```
 
-### Сборка whisper-cpp
-- Репозиторий: https://github.com/ggerganov/whisper.cpp
-- Сборка: `make -j` с поддержкой CoreML (на M4)
-- Модели: `ggml-small.bin`, `ggml-medium.bin`, `ggml-large-v3.bin`
-- Запуск: HTTP-сервер режим (whisper.cpp встроенный server)
+### Серверный стек
 
-### Ollama
-- Модель: `qwen2.5:3b` (или `qwen2.5:7b` если хватит)
-- Prompt для чистки:
-  ```
-  Исправь пунктуацию, заглавные буквы и форматирование в тексте.
-  Сохрани все слова, не меняй смысл. Язык текста: {language}.
-  
-  Текст: {raw_transcript}
-  ```
+- Python 3 + FastAPI + Uvicorn
+- faster-whisper large-v3 (CUDA/CoreML на M4)
+- Ollama Qwen 2.5 3B (чистка, отключена по умолчанию)
+- Запуск: `~/voicetyper-server/server/start.sh`
 
 ## Клиент (VoiceTyper.app)
 
-### Статус-бар меню
-- 🎤 — иконка приложения
-- "Start recording" / "Stop recording"
-- "Settings..."
-- "Quit"
+### Статус-бар
 
-### Настройки (SettingsView)
-| Параметр | Тип | По умолчанию | Описание |
-|----------|-----|-------------|----------|
-| Server Host | String | 127.0.0.1 | IP сервера |
-| Server Port | Int | 9001 | Порт сервера |
-| HotKey | KeyCombo | Option+Space | Хоткей записи |
-| Whisper Model | Picker | small | small / medium / large |
-| Clean with LLM | Toggle | true | Галочка "Проводить дополнительную чистку в LLM" |
-| Language | Picker | auto | auto / ru / en |
+- ⚪ mic.circle — готов
+- 🔴 mic.circle.fill (красный) — запись
+- 🟠 mic.circle.fill (оранжевый) — обработка
+
+### Настройки
+
+| Параметр | По умолч. | Описание |
+|----------|-----------|----------|
+| Server Host | 127.0.0.1 | IP сервера |
+| Server Port | 9001 | Порт |
+| Whisper Model | large-v3 | small/medium/large-v3 |
+| Clean with LLM | false | Чистка Ollama |
+| Language | auto | auto/ru/en |
 
 ### Аудиозапись
-- Формат: WAV, 16kHz, 16bit, mono
-- Библиотека: AVCaptureAudio or AudioQueue Services
-- Временный файл: `/tmp/voicetyper_recording.wav`
 
-### Вставка в окно
-- Через Accessibility API (AXUIElementCopyAttributeValue)
-- Эмуляция вставки текста через Cmd+V (после помещения в буфер)
-- Или через `CGEventPost` с последовательностью клавиш
+- AVAudioEngine + AVAudioConverter
+- Вход: выбор не-виртуального устройства
+- Формат: WAV 16kHz 16bit mono
+- Файл: временный, удаляется после отправки
+
+### Вставка
+
+1. Копирование в NSPasteboard.general
+2. AppleScript: `keystroke "v" using command down`
+3. Если нет Accessibility прав — уведомление "⌘V to paste"
+4. Логи: `~/Desktop/voicetyper_debug.log`
 
 ## Поток выполнения
 
-### Базовый (без LLM)
 ```
-1. Option+Space (зажал) → начало аудиозаписи
-2. Option+Space (отпустил) → стоп, WAV готов
-3. POST /transcribe → сервер → Whisper
-4. Сервер → сырой текст
-5. Вставка в активное окно
-```
-
-### С LLM-чисткой
-```
-1-3. То же самое
-4. Сервер → Whisper → сырой текст
-5. Ollama Qwen: чистка текста
-6. Сервер → чистый текст
-7. Вставка в активное окно
+1. Правый Cmd (зажал) → 🔴 запись
+2. Правый Cmd (отпустил) → 🟠 обработка
+3. POST /transcribe → fastfer-whisper large-v3
+4. Копирование в буфер обмена
+5. AppleScript Cmd+V (если есть Accessibility права)
+6. ⚪ готов
 ```
 
-## Решения (13.05.2026)
+## Сборка
 
-- ✅ Аудиоформат: WAV (16kHz, 16bit, mono)
-- ✅ LLM-чистка: настраиваемая галочка в UI
-- ✅ Вставка: сразу в активное окно (Accessibility API)
-- ✅ Язык: автоопределение Whisper с ручным выбором в настройках
-- ✅ Модели Whisper: выбор small/medium/large в настройках
+```
+cd VoiceTyper
+swift build -c debug
+bash scripts/make_app.sh
+cp -R VoiceTyper.app ~/Applications/
+xattr -dr com.apple.quarantine ~/Applications/VoiceTyper.app
+```
+
+## Примечания
+
+- macOS 26.5+ (Swift 6)
+- Mac mini M4 (78-й) не имеет встроенного микрофона — нужна вебкамера/гарнитура
+- Минимальный bundle ID: com.vklusov.VoiceTyper (права Accessibility не слетают)
+- Подпись: ad-hoc + entitlements (микрофон, автоматизация)

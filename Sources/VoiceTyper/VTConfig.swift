@@ -4,7 +4,7 @@ struct VTConfig {
     var serverHost: String = "127.0.0.1"
     var serverPort: Int = 9001
     var whisperModel: WhisperModelSize = .small
-    var cleanWithLLM: Bool = true
+    var cleanWithLLM: Bool = false
     var language: VTTranscriptionLanguage = .auto
 }
 

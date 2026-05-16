@@ -47,10 +47,10 @@ struct StatusBarView: View {
         let url = URL(string: "http://\(host):\(port)/status")!
 
         URLSession.shared.dataTask(with: url) { data, response, error in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 if let data = data,
                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let status = json["status"] as? String, status == "ok" {
+                   let s = json["status"] as? String, s == "ok" {
                     serverStatus = "Готов"
                 } else {
                     serverStatus = "Нет связи"

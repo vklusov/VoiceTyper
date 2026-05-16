@@ -1,31 +1,9 @@
-# VoiceTyper .gitignore
-
-# Swift Package Manager
 .build/
-DerivedData/
-*.xcuserdata
-*.xcworkspace
-client/DerivedData/
-
-# Python
-__pycache__/
-*.py[cod]
-venv/
-.env
-
-# macOS
+.build-arm64/
 .DS_Store
-*.swp
-*.swo
-*~
-
-# Audio temp files
-/tmp/voicetyper_*.wav
-/tmp/
-
-# IDE
-.idea/
-.vscode/
-
-# Build
-client/build/
+*.log
+*.app/
+.env
+__pycache__/
+*.pyc
+venv/

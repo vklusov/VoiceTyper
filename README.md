@@ -1,136 +1,119 @@
-# VoiceTyper 🎤
+# 🎤 VoiceTyper
 
-> macOS-приложение для голосового ввода текста. Хоткей → речь → текст → сразу в окно.
-
-**VoiceTyper** слушает, распознаёт и печатает за тебя.  
-Написан голосом для быстрого набора: идеи, заметки, ответы — всё, что удобнее сказать, чем напечатать.
+Голосовой ввод текста на macOS. Push-to-talk: правый Cmd → говорить → распознавание → вставка.
 
 ## Как это работает
 
-```
-🎙️ Хоткей (Option+Space) → Аудиозапись → Whisper → (🛠️ LLM-чистка опционально) → Вставка в окно
-```
+1. Нажать и держать **правый Cmd** → 🔴 запись
+2. Отпустить → 🟠 faster-whisper large-v3 распознаёт
+3. Текст в буфере обмена + уведомление
+4. Если есть Accessibility права — вставляется автоматически (Cmd+V)
+5. Если нет — уведомление "⌘V to paste" — нажми ⌘V сам
 
-- Нажал хоткей — говоришь  
-- Отпустил — текст уже вставляется туда, где ты работал  
-- Чистка в LLM (опционально) — расставляет пунктуацию, заглавные, формат
+## Установка
 
-## Архитектура
-
-```
-┌──────────────────────────┐     HTTP/JSON      ┌──────────────────────────┐
-│    VoiceTyper.app        │ ◄───────────────► │   VoiceTyper Server      │
-│   (macOS, SwiftUI)       │                    │ (Python + FastAPI)       │
-│                          │                    │                          │
-│  StatusBar App           │                    │  faster-whisper (small)  │
-│  HotKey (Option+Space)   │                    │  Ollama + Qwen 2.5 3B   │
-│  Audio Recorder          │                    │                          │
-│  Paste via A11y API      │                    │                          │
-└──────────────────────────┘                    └──────────────────────────┘
-```
-
-### Клиент (скоро)
-- Иконка в трее macOS
-- Горячая клавиша (Option+Space)
-- Запись → отправка на сервер → вставка в активное окно
-- Настройки: модель Whisper, LLM-чистка, язык, хоткей
-
-### Сервер (готов ✅)
-- FastAPI на Python
-- Транскрибация через [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
-- Опциональная чистка текста через [Ollama](https://ollama.com) + Qwen 2.5 3B
-- Поддержка русского и английского
-
-## Быстрый старт (сервер)
-
-### 1. Установка зависимостей
+### 1. Сервер (78-й Mac Mini, 127.0.0.1)
 
 ```bash
-# Python
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+# Установка зависимостей
+ssh server
+python3 -m venv ~/voicetyper-server/venv
+source ~/voicetyper-server/venv/bin/activate
+pip install -r ~/voicetyper-server/requirements.txt
 
-# Ollama (для LLM-чистки, опционально)
-# https://ollama.com/download
-ollama pull qwen2.5:3b
+# Запуск
+bash ~/voicetyper-server/server/start.sh
+# Сервер на порту 9001
 ```
 
-### 2. Запуск
+Сервер автоматически загрузит faster-whisper large-v3 при первом запросе (~3 GB).
+
+### 2. Клиент (любой Mac)
 
 ```bash
-# Убедись, что Ollama запущен
-ollama serve &
+# Клонирование
+git clone https://github.com/vklusov/VoiceTyper.git
+cd VoiceTyper
 
-# Запусти сервер
-./server/start.sh
-# или: python3 server/server.py
+# Сборка
+swift build -c debug
+
+# Упаковка в .app и подпись
+bash scripts/make_app.sh
+
+# Установка
+cp -R VoiceTyper.app ~/Applications/
+xattr -dr com.apple.quarantine ~/Applications/VoiceTyper.app
+open ~/Applications/VoiceTyper.app
 ```
 
-По умолчанию сервер слушает порт **9001**.
+### 3. Права доступа (однократно)
 
-### 3. Проверка
+- **Микрофон:** System Settings → Privacy → Microphone → VoiceTyper
+- **Accessibility (для автовставки):** System Settings → Privacy → Accessibility → VoiceTyper
+- **Уведомления:** разрешить при первом запуске
+
+## Быстрая пересборка
 
 ```bash
-curl http://localhost:9001/status
-# → {"status":"ok","whisper_model":"small","ollama":"available"}
+cd VoiceTyper
+swift build -c debug
+bash scripts/make_app.sh
+rm -rf ~/Applications/VoiceTyper.app
+cp -R VoiceTyper.app ~/Applications/
+xattr -dr com.apple.quarantine ~/Applications/VoiceTyper.app
+open ~/Applications/VoiceTyper.app
 ```
-
-## API
-
-### `GET /status`
-Проверка здоровья сервера.
-
-### `GET /settings`
-Текущие настройки и доступные модели.
-
-### `POST /transcribe`
-Транскрибация аудио.
-
-**Request:** `multipart/form-data`
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `audio` | File | WAV-файл (16kHz, 16bit, mono) |
-| `clean_llm` | bool | Применить LLM-чистку |
-| `language` | string | `"auto"`, `"ru"` или `"en"` |
-
-**Response:**
-```json
-{
-  "raw": "сырой транскрипт",
-  "cleaned": "Чистый транскрипт (если clean_llm=true)",
-  "language": "ru",
-  "language_probability": 0.98,
-  "duration_ms": 1200,
-  "model": "small"
-}
-```
-
-## Настройки сервера
-
-| Переменная | По умолчанию | Описание |
-|-----------|-------------|----------|
-| порт (argv) | 9001 | Порт сервера |
-| модель Whisper | small | tiny/base/small/medium/large-v3 |
-| LLM-чистка | false | Вкл/выкл в запросе |
 
 ## Требования
 
-- **macOS** (рекомендуется Apple Silicon)
-- **Python 3.10+**
-- **Ollama** (опционально, только для LLM-чистки)
-- ~500 MB для модели Whisper small
+- **macOS 26.5+** (Swift 6)
+- **Python 3.9+** на сервере
+- **faster-whisper** (загружается автоматически при первом запросе)
+- Микрофон (в Mac mini нет встроенного — используйте вебкамеру или гарнитуру)
 
-## Roadmap
+## Настройки
 
-- [x] Сервер: транскрибация через faster-whisper
-- [x] Сервер: опциональная LLM-чистка
-- [ ] Клиент: SwiftUI приложение в трее
-- [ ] Клиент: хоткей запись
-- [ ] Клиент: вставка в активное окно
-- [ ] Настройки: выбор модели в UI
-- [ ] Lang auto-detect toggle
-- [ ] Режим реального времени (streaming)
+Настройки доступны через иконку в трее → правый клик → Settings:
+
+| Параметр | По умолч. | Описание |
+|----------|-----------|----------|
+| Server Host | 127.0.0.1 | IP сервера |
+| Server Port | 9001 | Порт сервера |
+| Whisper Model | large-v3 | small / medium / large-v3 |
+| Clean with LLM | выкл | Чистка через Ollama Qwen 2.5 |
+| Language | auto | Авто / Русский / English |
+
+## Известные ограничения
+
+- **Mac mini M4** не имеет встроенного микрофона — используйте USB-гарнитуру или вебкамеру
+- Quality распознавания зависит от микрофона: вебкамера C920 даёт посредственный результат
+- SuperWhisper использует собственные fine-tuned модели и пост-обработку — VoiceTyper использует стоковый faster-whisper
+- Автовставка требует Accessibility прав
+
+## Структура проекта
+
+```
+VoiceTyper/
+├── Package.swift                   # SPM
+├── Sources/VoiceTyper/
+│   ├── VoiceTyperApp.swift        # @main
+│   ├── AppDelegate.swift          # Логика, хоткей, состояния
+│   ├── AudioRecorder.swift        # Запись через AVAudioEngine
+│   ├── VoiceTyperClient.swift     # HTTP-клиент к серверу
+│   ├── PasteManager.swift         # Копирование + вставка
+│   ├── VTConfig.swift             # Настройки
+│   ├── StatusBarView.swift        # Менюбар
+│   └── SettingsView.swift         # Настройки UI
+├── server/
+│   └── server.py                  # FastAPI + faster-whisper
+├── scripts/
+│   ├── make_app.sh                # Упаковка .app
+│   └── entitle_and_sign.sh        # Подпись (устар.)
+├── VoiceTyper.entitlements        # Entitlements
+├── service/                       # launchd plist (бета)
+└── ARCHITECTURE.md
+```
 
 ## Лицензия
 
